@@ -413,8 +413,36 @@ public class Boss {
                 AiFilter filterResult = null;
                 if (config.getEnableAI()) {
                     // AI检测岗位是否匹配
-                    String jd = CHROME_DRIVER.findElement(By.xpath("//div[@class='job-sec-text']")).getText();
-                    filterResult = checkJob(keyword, job.getJobName(), jd);
+                    String jd = "";
+                    String companyIntro = ""; // 新增：用于存储公司介绍
+                    try {
+                         jd = CHROME_DRIVER.findElement(By.xpath("//div[@class='job-sec-text']")).getText();
+                    } catch (Exception e) {
+                         log.warn("获取职位描述失败 for job: {}, 错误: {}", job.getHref(), e.getMessage());
+                    }
+
+                    // 新增：尝试获取公司介绍
+                    try {
+                         // 尝试多种可能的 XPath 定位公司介绍文本区域
+                         // 优先尝试通过标题定位
+                         companyIntro = CHROME_DRIVER.findElement(By.xpath("//h3[contains(text(),'公司介绍')]/following-sibling::div[contains(@class,'text')]")).getText();
+                         log.info("成功获取到公司介绍信息。");
+                    } catch (org.openqa.selenium.NoSuchElementException e1) {
+                         try {
+                              // 如果通过标题找不到，尝试通过常用的 class 定位 (可能因页面版本不同而变化)
+                              companyIntro = CHROME_DRIVER.findElement(By.xpath("//div[contains(@class,'job-firm-item')]//div[@class='text']")).getText();
+                              log.info("通过备用 XPath 获取到公司介绍信息。");
+                         } catch (org.openqa.selenium.NoSuchElementException e2) {
+                              log.warn("未能找到公司介绍元素 for job: {}。将不使用公司介绍参与打招呼语生成。", job.getHref());
+                              companyIntro = ""; // 确保为空字符串
+                         }
+                    } catch (Exception e) {
+                         log.error("获取公司介绍时发生意外错误 for job: {}, 错误: {}", job.getHref(), e.getMessage());
+                         companyIntro = "";
+                    }
+
+                    // 调用 checkJob，并传入公司介绍
+                    filterResult = checkJob(keyword, job.getJobName(), jd, companyIntro);
                 }
                 btn.click();
                 if (isLimit()) {
@@ -722,10 +750,31 @@ public class Boss {
         CHROME_DRIVER.switchTo().window(tabs.get(0));
     }
 
-    private static AiFilter checkJob(String keyword, String jobName, String jd) {
+    private static AiFilter checkJob(String keyword, String jobName, String jd, String companyIntro) {
         AiConfig aiConfig = AiConfig.init();
-        String requestMessage = String.format(aiConfig.getPrompt(), aiConfig.getIntroduce(), keyword, jobName, jd, config.getSayHi());
+        String requestMessage;
+        try {
+            requestMessage = String.format(aiConfig.getPrompt(),
+                                             aiConfig.getIntroduce(),
+                                             keyword,
+                                             jobName,
+                                             jd,         // 职位描述
+                                             companyIntro, // 公司介绍 (新增)
+                                             config.getSayHi()); // 默认打招呼语
+        } catch (java.util.MissingFormatArgumentException e) {
+             log.error("AI Prompt 格式错误！缺少用于公司介绍的占位符。请检查 config.yaml 中的 ai.prompt 配置。错误: {}", e.getMessage());
+             // 降级处理：不包含公司介绍，使用可能存在的旧 prompt 格式
+             try {
+                   requestMessage = String.format(aiConfig.getPrompt(), aiConfig.getIntroduce(), keyword, jobName, jd, config.getSayHi());
+                   log.warn("已降级使用可能兼容的旧 Prompt 格式 (未包含公司介绍)。");
+             } catch (Exception innerE) {
+                  log.error("尝试使用旧 Prompt 格式也失败，无法生成 AI 请求消息。错误: {}", innerE.getMessage());
+                  return new AiFilter(false, "AI Prompt 配置错误"); // 返回失败状态
+             }
+        }
+
         String result = AiService.sendRequest(requestMessage);
+        // 解析逻辑保持不变，但 AI 服务需要能处理包含公司介绍的新 prompt
         return result.contains("false") ? new AiFilter(false) : new AiFilter(true, result);
     }
 
