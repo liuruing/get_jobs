@@ -463,9 +463,11 @@ public class Boss {
                     WebElement cityElement = CHROME_DRIVER.findElement(By.xpath("//a[@class='position-content']/span[@class='city']"));
                     String position = positionNameElement.getText() + " " + salaryElement.getText() + " " + cityElement.getText();
                     company = company == null ? "未知公司: " + job.getHref() : company;
-                    Boolean imgResume = sendResume(company);
+                    boolean sentResume = sendResume(company);
                     SeleniumUtil.sleep(2);
-                    log.info("正在投递【{}】公司，【{}】职位，招聘官:【{}】{}", company, position, recruiter, imgResume ? "发送图片简历成功！" : "");
+                    log.info("正在投递【{}】公司，【{}】职位，招聘官:【{}】{}", 
+                             company, position, recruiter, 
+                             sentResume ? "(已发送图片简历)" : "(未发送图片简历)");
                     resultList.add(job);
                     noJobPages = 0;
                 } catch (Exception e) {
@@ -481,37 +483,56 @@ public class Boss {
         return str != null && !str.isEmpty();
     }
 
-    public static Boolean sendResume(String company) {
-        // 如果 config.getSendImgResume() 为 true，再去找图片
-        if (!config.getSendImgResume()) {
-            return false;
+    public static boolean sendResume(String company) {
+        // 1. 检查总开关是否开启
+        if (config.getSendImgResume() == null || !config.getSendImgResume()) {
+            return false; // 开关未开启，不发送
         }
 
+        File imageFile = null;
+        String customPath = config.getCustomResumePath();
+
+        // 2. 尝试使用自定义路径
+        if (isValidString(customPath)) {
+            File customFile = new File(customPath);
+            if (customFile.exists() && customFile.isFile()) {
+                imageFile = customFile;
+                log.info("使用自定义简历图片路径：{}", imageFile.getAbsolutePath());
+            } else {
+                log.warn("配置的自定义简历路径无效或文件不存在: {}。将尝试加载默认简历 /resume.jpg", customPath);
+            }
+        }
+
+        // 3. 如果自定义路径无效或未提供，则尝试加载默认路径
+        if (imageFile == null) {
+            try {
+                URL resourceUrl = Boss.class.getResource("/resume.jpg");
+                if (resourceUrl == null) {
+                    log.error("在类路径下未找到默认简历 /resume.jpg 文件！请检查 resources 目录。不发送图片简历。");
+                    return false;
+                }
+                imageFile = new File(resourceUrl.toURI());
+                log.info("使用默认简历图片路径：{}", imageFile.getAbsolutePath());
+            } catch (Exception e) {
+                log.error("加载默认简历 /resume.jpg 时出错: {}。不发送图片简历。", e.getMessage());
+                return false;
+            }
+        }
+
+        // 4. 检查最终确定的文件是否存在 (理论上自定义路径已检查过，默认路径也应存在)
+        if (imageFile == null || !imageFile.exists() || !imageFile.isFile()) {
+             log.error("最终确定的简历图片文件无效或不存在: {}。不发送图片简历。", imageFile != null ? imageFile.getAbsolutePath() : "null");
+             return false;
+        }
+
+        // 5. 发送图片
         try {
-            // 从类路径加载 resume.jpg
-            URL resourceUrl = Boss.class.getResource("/resume.jpg");
-            if (resourceUrl == null) {
-                log.error("在类路径下未找到 resume.jpg 文件！");
-                return false;
-            }
-
-            // 将 URL 转为 File 对象
-            File imageFile = new File(resourceUrl.toURI());
-            log.info("简历图片路径：{}", imageFile.getAbsolutePath());
-
-            if (!imageFile.exists()) {
-                log.error("简历图片不存在！: {}", imageFile.getAbsolutePath());
-                return false;
-            }
-
-            // 使用 XPath 定位 <input type="file"> 元素
             WebElement fileInput = CHROME_DRIVER.findElement(By.xpath("//div[@aria-label='发送图片']//input[@type='file']"));
-
-            // 上传图片
             fileInput.sendKeys(imageFile.getAbsolutePath());
+            log.info("成功发送图片简历: {}", imageFile.getName());
             return true;
         } catch (Exception e) {
-            log.error("发送简历图片时出错：{}", e.getMessage());
+            log.error("发送简历图片时出错 (文件: {}): {}", imageFile.getAbsolutePath(), e.getMessage());
             return false;
         }
     }
@@ -527,7 +548,7 @@ public class Boss {
      */
     private static boolean isSalaryNotExpected(String salary) {
         try {
-            // 1. 如果没有期望薪资范围，直接返回 false，表示“薪资并非不符合预期”
+            // 1. 如果没有期望薪资范围，直接返回 false，表示"薪资并非不符合预期"
             List<Integer> expectedSalary = config.getExpectedSalary();
             if (!hasExpectedSalary(expectedSalary)) {
                 return false;
@@ -536,7 +557,7 @@ public class Boss {
             // 2. 清理薪资文本（比如去掉 "·15薪"）
             salary = removeYearBonusText(salary);
 
-            // 3. 如果薪资格式不符合预期（如缺少 "K" / "k"），直接返回 true，表示“薪资不符合预期”
+            // 3. 如果薪资格式不符合预期（如缺少 "K" / "k"），直接返回 true，表示"薪资不符合预期"
             if (!isSalaryInExpectedFormat(salary)) {
                 return true;
             }

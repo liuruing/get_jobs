@@ -79,9 +79,15 @@ public class BossConfig {
     private Boolean filterDeadHR;
 
     /**
-     * 是否发送图片简历
+     * 是否发送图片简历 (总开关)
      */
     private Boolean sendImgResume;
+
+    /**
+     * 自定义图片简历的绝对路径 (可选, sendImgResume为true时生效)
+     * 如果为空或无效, 则尝试加载类路径下的 /resume.jpg
+     */
+    private String customResumePath;
 
     /**
      * 目标薪资
