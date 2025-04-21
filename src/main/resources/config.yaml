@@ -3,7 +3,7 @@ boss:
   debugger: true # 开发者模式，默认为false即可
   sayHi: "您好,我有AIGC大模型、Java,Python,Golang的相关经验,希望应聘这个岗位,期待可以与您进一步沟通,谢谢！" #必须要关闭boss的自动打招呼
   #  keywords: [ "Golang" , "Java"   ] # 需要搜索的职位,会依次投递
-  keywords: [ "java 后端开发 工程师 "   ] # 需要搜索的职位,会依次投递 java 后端开发 工程师
+  keywords: [ "java "   ] # 需要搜索的职位,会依次投递 java 后端开发 工程师
   industry: [ "互联网" ] # 公司行业，只能选三个，相关代码枚举的部分，如果需要其他的需要自己找
   #  cityCode: [ "上海" , "杭州" , "深圳" , "北京"] # 只列举了部分,如果没有的需要自己找：目前支持的：全国 北京 上海 杭州 广州 深圳 成都 天津
   cityCode: [ "全国"] # 只列举了部分,如果没有的需要自己找：目前支持的：全国 北京 上海 杭州 广州 深圳 成都 天津
@@ -16,18 +16,18 @@ boss:
   expectedSalary: [ 10,20 ] #期望薪资，单位为K，第一个数字为最低薪资，第二个数字为最高薪资，只填一个数字默认为最低薪水
   waitTime: 10 #每投递一个岗位，等待几秒
   filterDeadHR: true # 是否过滤不活跃HR, 仅当此项为 true 时，下面的 deadStatus 列表才会生效
-  enableAI: false # 开启AI检测与自动生成打招呼语
-  sendImgResume: false # 是否发送图片简历 (true/false, 总开关)
+  enableAI: true # 开启AI检测与自动生成打招呼语
+  sendImgResume: true # 是否发送图片简历 (true/false, 总开关)
   # 自定义图片简历的绝对路径 (可选, 仅当 sendImgResume 为 true 时生效)
   # 如果为空或无效, 且 sendImgResume 为 true, 则尝试加载类路径下的 /resume.jpg
   # customResumePath: "C:/path/to/your/resume.jpg" # Windows 示例
   # customResumePath: "/path/to/your/resume.jpg"   # Linux/macOS 示例
-  customResumePath: "" # 默认为空，使用 /resume.jpg (如果 sendImgResume 为 true)
+  customResumePath: "D:/刘睿__后端开发 a.png" # 默认为空，使用 /resume.jpg (如果 sendImgResume 为 true)
   enableJobFilter: false # 是否启用额外的职位筛选器
   # 不活跃HR状态列表 (仅当 filterDeadHR 为 true 时生效)
   # 程序会过滤掉活跃状态文本包含列表中任意一个字符串的HR
-  deadStatus: [ "半年前活跃", "1周前活跃" ]
-
+  deadStatus: [ "周前活跃" , "月内活跃", "半年前活跃" ]
+  
 job51:
   jobArea: [ "上海" ]  #工作地区：目前只有【北京 成都 上海 广州 深圳】
   keywords: [ "java", "python", "go", "golang", "大模型", "软件工程师" ] #关键词：依次投递
@@ -53,7 +53,7 @@ zhilian:
 ai:
   introduce: "我熟练使用Spring Boot、Spring Cloud、Alibaba Cloud及其生态体系，擅长MySQL、Oracle、PostgreSQL等关系型数据库以及MongoDB、Redis等非关系型数据库。熟悉Docker、Kubernetes等容器化技术，掌握WebSocket、Netty等通信协议，拥有即时通讯系统的开发经验。熟练使用MyBatis-Plus、Spring Data、Django ORM等ORM框架，熟练使用Python、Golang开发，具备机器学习、深度学习及大语言模型的开发与部署经验。此外，我熟悉前端开发，涉及Vue、React、Nginx配置及PHP框架应用" #这是喂给AI的提示词，主要介绍自己的优势
   prompt:  >-
-    我目前在找工作,%s,我期望的的岗位方向是【%s】,目前我需要投递的岗位名称是【%s】,这个岗位的要求是【%s】,这个岗位所属的公司介绍是【%s】，如果这个岗位和我的期望与经历基本符合，并且是后端开发（java,go,python,AI）,注意是基本符合，那么请帮我写一个给HR打招呼的文本发给我，如果这个岗位和我的期望经历完全不相干，或者是市场营销，等非程序员类工作，或者是PHP语言,C++语言的岗位，一定务必直接返回false给我，注意只要返回我需要的内容即可，不要有其他的语气助词，重点要突出我和岗位的匹配度以及我的优势，
+    我目前在找工作,%s,我期望的的岗位方向是【%s】,目前我需要投递的岗位名称是【%s】,这个岗位的要求是【%s】,这个岗位所属的公司介绍是【%s】，如果这个岗位和我的期望与经历基本符合，并且是后端开发（java,go,python,AI）,注意是基本符合，那么请帮我写一个给HR打招呼的文本发给我，如果这个岗位和我的期望经历完全不相干，或者是市场营销，等非程序员类工作，或者是PHP语言,C++语言的或者是前端开发，等非后端开发的岗位，一定务必直接返回false给我，注意只要返回我需要的内容即可，不要有其他的语气助词，重点要突出我和岗位的匹配度以及我的优势，
     
     Role: 语言优化专家和招聘沟通顾问 
     Background: 用户需要将岗位介绍和个人介绍这两段文本合并，用于招聘平台打招呼，同时保留要点并突出重点，以适应特定的岗位需求和招聘平台的沟通风格。字数控制在100-150字之间
@@ -82,7 +82,6 @@ ai:
     合并后文本：我掌握go开发，参与过短视频项目，熟悉Django框架和数据分析，希望应聘这个岗位,期待可以与您进一步沟通,谢谢。
     
     我自己写的招呼语是：【%s】，你可以参照我自己写的根据岗位情况进行适当调整。
-
 
 
 bot:

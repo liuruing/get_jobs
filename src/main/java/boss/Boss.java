@@ -443,6 +443,14 @@ public class Boss {
 
                     // 调用 checkJob，并传入公司介绍
                     filterResult = checkJob(keyword, job.getJobName(), jd, companyIntro);
+
+                    // 新增：检查 AI 判断结果，如果不匹配则跳过后续沟通
+                    if (filterResult == null || !filterResult.getResult()) {
+                        log.info("AI 判断岗位 [{}] 不匹配或分析失败，将跳过沟通。", job.getJobName());
+                        closeWindow(tabs); // 关闭当前标签页
+                        continue; // 继续处理下一个岗位
+                    }
+                    // 如果 AI 判断匹配，则继续后续流程...
                 }
                 btn.click();
                 if (isLimit()) {
@@ -491,6 +499,38 @@ public class Boss {
                     WebElement cityElement = CHROME_DRIVER.findElement(By.xpath("//a[@class='position-content']/span[@class='city']"));
                     String position = positionNameElement.getText() + " " + salaryElement.getText() + " " + cityElement.getText();
                     company = company == null ? "未知公司: " + job.getHref() : company;
+                    boolean detailsFetched = false; // 标志是否成功获取详细信息
+                    int maxRetries = 3; // 最大重试次数
+                    int retryDelaySeconds = 2; // 重试间隔秒数
+
+                    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+                             // 尝试获取更详细的信息
+                             log.debug("尝试第 {}/{} 次获取聊天窗口详细信息...", attempt, maxRetries);
+                             WebElement baseInfo = CHROME_DRIVER.findElement(By.xpath("//p[@class='base-info fl']"));
+                             // 显式等待姓名元素出现可能更稳健，但先用简单重试
+                             // WAIT.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//p[@class='base-info fl']/span[@class='name']")));
+                             recruiter = baseInfo.findElement(By.xpath("./span[@class='name']")).getText() + " " + baseInfo.findElement(By.xpath("./span[@class='base-title']")).getText();
+                             company = baseInfo.findElement(By.xpath("./span[2]")).getText();
+                             job.setCompanyName(company); // 更新信息
+                             WebElement posContent = CHROME_DRIVER.findElement(By.xpath("//a[@class='position-content']"));
+                             position = posContent.findElement(By.xpath("./span[@class='position-name']")).getText() + " " + posContent.findElement(By.xpath("./span[@class='salary']")).getText() + " " + posContent.findElement(By.xpath("./span[@class='city']")).getText();
+                             detailsFetched = true;
+                             log.info("成功从聊天窗口获取详细信息 (尝试次数 {})", attempt);
+                             break; // 成功获取，跳出重试循环
+                        } catch (NoSuchElementException e) {
+                             log.warn("尝试 {}/{} 获取聊天窗口详细信息失败: {}。将在 {} 秒后重试...", attempt, maxRetries, e.getMessage(), retryDelaySeconds);
+                             if (attempt < maxRetries) {
+                                 SeleniumUtil.sleep(retryDelaySeconds);
+                             } else {
+                                 log.error("重试 {} 次后仍无法获取聊天窗口详细信息，将使用列表页信息。", maxRetries);
+                             }
+                        } catch (Exception e) { 
+                             log.error("获取聊天窗口详细信息时发生其他错误 (尝试 {}): {}", attempt, e.getMessage(), e);
+                             break; // 遇到其他异常，不再重试
+                        }
+                    }
+                    // 无论是否获取成功，都继续执行
                     boolean sentResume = sendResume(company);
                     SeleniumUtil.sleep(2);
                     log.info("正在投递【{}】公司，【{}】职位，招聘官:【{}】{}", 
@@ -713,31 +753,45 @@ public class Boss {
         if (config.getFilterDeadHR() == null || !config.getFilterDeadHR()) {
             return false;
         }
-        // 检查 deadStatus 列表是否有效
         List<String> configuredDeadStatus = config.getDeadStatus();
         if (configuredDeadStatus == null || configuredDeadStatus.isEmpty()) {
             log.warn("deadStatus 配置为空或未在 config.yaml 中配置，不执行 HR 活跃状态过滤。");
             return false;
         }
+
+        String companyAndHR = "未知招聘者"; // Default, will be updated if possible
         try {
-            // 尝试获取 HR 的活跃时间
-            String activeTimeText = CHROME_DRIVER.findElement(By.xpath("//span[@class='boss-active-time']")).getText();
-            log.info("{}：{}", getCompanyAndHR(), activeTimeText);
-            // 使用从 config 加载的 deadStatus 列表进行判断
-            return containsDeadStatus(activeTimeText, configuredDeadStatus);
+            companyAndHR = getCompanyAndHR(); // Try to get company/HR info for logging
         } catch (Exception e) {
-            log.info("没有找到【{}】的活跃状态, 默认此岗位将会投递...", getCompanyAndHR());
+            // Log the inability to get HR info, but don't stop the status check
+            log.warn("检查 HR 活跃状态前无法获取公司/HR信息: {}. 将使用默认名称记录日志", e.getMessage());
+        }
+
+        try {
+            // 获取整个 job-boss-info 区域的文本
+            WebElement jobBossInfoElement = CHROME_DRIVER.findElement(By.xpath("//div[@class='job-boss-info']"));
+            String fullText = jobBossInfoElement.getText();
+            
+            log.debug("获取到 job-boss-info 区域文本: {}", fullText);
+            
+            // 直接在文本中查找配置的 deadStatus 关键词
+            for (String deadStatus : configuredDeadStatus) {
+                if (fullText.contains(deadStatus)) {
+                    log.info("{} 中发现不活跃状态关键词 '{}', 判定 HR 不活跃", companyAndHR, deadStatus);
+                    return true; // 找到匹配的不活跃状态
+                }
+            }
+            
+            // 没有找到匹配的不活跃状态关键词
+            log.info("{} 中未发现任何不活跃状态关键词, 判定 HR 活跃", companyAndHR);
+            return false;
+            
+        } catch (Exception e) {
+            // 如果获取 job-boss-info 失败，记录错误并默认 HR 活跃
+            log.warn("无法获取 HR 信息区域 (job-boss-info) for {}: {}. 默认 HR 活跃", 
+                    companyAndHR, e.getMessage());
             return false;
         }
-    }
-
-    public static boolean containsDeadStatus(String activeTimeText, List<String> deadStatus) {
-        for (String status : deadStatus) {
-            if (activeTimeText.contains(status)) {
-                return true;// 一旦找到包含的值，立即返回 true
-            }
-        }
-        return false;// 如果没有找到，返回 false
     }
 
     private static String getCompanyAndHR() {
@@ -752,30 +806,51 @@ public class Boss {
 
     private static AiFilter checkJob(String keyword, String jobName, String jd, String companyIntro) {
         AiConfig aiConfig = AiConfig.init();
-        // **提醒:** 确保 config.yaml 中的 ai.prompt 格式与这里的参数顺序一致
-        // (introduce, keyword, jobName, jd, companyIntro, sayHi)
         String requestMessage = String.format(aiConfig.getPrompt(),
                                               aiConfig.getIntroduce(),
                                               keyword,
                                               jobName,
-                                              jd,            // 职位描述
-                                              companyIntro,  // 公司介绍
-                                              config.getSayHi()); // 默认打招呼语
+                                              jd,
+                                              companyIntro,
+                                              config.getSayHi());
 
-        log.debug("向 AI 发送的请求消息: {}", requestMessage); // 添加 Debug 日志方便调试
+        log.debug("准备向 AI 发送的请求消息: {}", requestMessage);
+
         String result = AiService.sendRequest(requestMessage);
-        log.debug("从 AI 收到的原始响应: {}", result);
 
-        // 简单的解析逻辑：检查是否包含 "false"
-        boolean matchResult = !result.contains("false");
-        // 如果匹配，直接使用 AI 返回的完整结果作为消息；如果不匹配，消息为 null
-        String message = matchResult ? result : null;
+        // --- 重试逻辑开始 ---
+        if (result == null || result.isEmpty()) {
+            log.warn("首次 AI 调用失败，将开始重试...");
+            int maxRetries = 2; // 重试次数 (总共尝试 1+2=3 次)
+            int retryDelaySeconds = 5;
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                log.info("等待 {} 秒后进行第 {}/{} 次重试...", retryDelaySeconds, attempt, maxRetries);
+                SeleniumUtil.sleep(retryDelaySeconds);
+                result = AiService.sendRequest(requestMessage);
+                if (result != null && !result.isEmpty()) {
+                    log.info("AI 服务调用在第 {} 次重试成功。", attempt);
+                    break; // 成功获取结果，跳出重试循环
+                }
+                log.warn("第 {}/{} 次重试仍然失败。", attempt, maxRetries);
+            }
+        }
+        // --- 重试逻辑结束 ---
 
-        if (!matchResult) {
-            log.info("AI 判断不匹配，原始返回: {}", result);
+        // 处理最终结果
+        if (result == null || result.isEmpty()) {
+            log.error("AI 调用在 {} 次尝试后最终失败。", 1 + 2); // (1 initial + maxRetries)
+            return new AiFilter(false, "AI 请求失败");
         }
 
-        return new AiFilter(matchResult, message);
+        // 如果请求成功，继续原来的判断逻辑
+        log.debug("AI 服务成功返回，原始响应: {}", result);
+        if ("false".equalsIgnoreCase(result.trim())) {
+            log.info("AI 判断不匹配 (返回 'false')");
+            return new AiFilter(false, null); // 显式不匹配
+        }
+
+        log.info("AI 判断匹配，返回建议消息。");
+        return new AiFilter(true, result); // 匹配，使用 AI 返回的消息
     }
 
     private static boolean isTargetJob(String keyword, String jobName) {
