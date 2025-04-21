@@ -1,5 +1,7 @@
 package utils;
 
+import utils.Job;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,4 +24,4 @@ public class JobFilter {
                 .filter(job -> job.getJobName() != null && job.getJobName().toLowerCase().contains("java"))
                 .collect(Collectors.toList());
     }
-}
+} 

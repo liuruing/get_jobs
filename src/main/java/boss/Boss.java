@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import utils.Job;
 import utils.JobUtils;
 import utils.SeleniumUtil;
+import utils.JobFilter;
 
 import java.io.File;
 import java.io.IOException;
@@ -46,7 +47,6 @@ public class Boss {
     static Set<String> blackRecruiters;
     static Set<String> blackJobs;
     static List<Job> resultList = new ArrayList<>();
-    static List<String> deadStatus = List.of("半年前活跃");
     static String dataPath = "./src/main/java/boss/data.json";
     static String cookiePath = "./src/main/java/boss/cookie.json";
     static int noJobPages;
@@ -54,6 +54,7 @@ public class Boss {
     static Date startDate;
     static BossConfig config = BossConfig.init();
     static int maxPages = 10;
+    static JobFilter jobFilter = new JobFilter();
 
     public static void main(String[] args) {
         loadData(dataPath);
@@ -359,7 +360,17 @@ public class Boss {
             jobs.add(job);
         }
 
-        for (Job job : jobs) {
+        // 如果启用了 JobFilter，则执行额外的筛选
+        List<Job> filteredJobs;
+        if (config.getEnableJobFilter() != null && config.getEnableJobFilter()) {
+            log.info("启用 JobFilter 进行额外筛选...");
+            filteredJobs = jobFilter.filterJobs(jobs);
+            log.info("JobFilter 筛选完成，筛选前数量: {}, 筛选后数量: {}", jobs.size(), filteredJobs.size());
+        } else {
+            filteredJobs = jobs; // 如果未启用，则使用原始列表
+        }
+
+        for (Job job : filteredJobs) {
             // 打开新的标签页
             JavascriptExecutor jse = CHROME_DRIVER;
             jse.executeScript("window.open(arguments[0], '_blank')", job.getHref());
@@ -649,15 +660,22 @@ public class Boss {
 
 
     private static boolean isDeadHR() {
-        if (!config.getFilterDeadHR()) {
+        // 检查是否启用过滤
+        if (config.getFilterDeadHR() == null || !config.getFilterDeadHR()) {
+            return false;
+        }
+        // 检查 deadStatus 列表是否有效
+        List<String> configuredDeadStatus = config.getDeadStatus();
+        if (configuredDeadStatus == null || configuredDeadStatus.isEmpty()) {
+            log.warn("deadStatus 配置为空或未在 config.yaml 中配置，不执行 HR 活跃状态过滤。");
             return false;
         }
         try {
             // 尝试获取 HR 的活跃时间
             String activeTimeText = CHROME_DRIVER.findElement(By.xpath("//span[@class='boss-active-time']")).getText();
             log.info("{}：{}", getCompanyAndHR(), activeTimeText);
-            // 如果 HR 活跃状态符合预期，则返回 true
-            return containsDeadStatus(activeTimeText, deadStatus);
+            // 使用从 config 加载的 deadStatus 列表进行判断
+            return containsDeadStatus(activeTimeText, configuredDeadStatus);
         } catch (Exception e) {
             log.info("没有找到【{}】的活跃状态, 默认此岗位将会投递...", getCompanyAndHR());
             return false;

@@ -93,6 +93,16 @@ public class BossConfig {
      */
     private String waitTime;
 
+    /**
+     * 是否启用额外的职位筛选器
+     */
+    private Boolean enableJobFilter;
+
+    /**
+     * 不活跃 HR 状态列表 (从 config.yaml 加载)
+     */
+    private List<String> deadStatus;
+
     @SneakyThrows
     public static BossConfig init() {
         BossConfig config = JobUtils.getConfig(BossConfig.class);
