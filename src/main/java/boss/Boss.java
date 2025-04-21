@@ -752,30 +752,30 @@ public class Boss {
 
     private static AiFilter checkJob(String keyword, String jobName, String jd, String companyIntro) {
         AiConfig aiConfig = AiConfig.init();
-        String requestMessage;
-        try {
-            requestMessage = String.format(aiConfig.getPrompt(),
-                                             aiConfig.getIntroduce(),
-                                             keyword,
-                                             jobName,
-                                             jd,         // 职位描述
-                                             companyIntro, // 公司介绍 (新增)
-                                             config.getSayHi()); // 默认打招呼语
-        } catch (java.util.MissingFormatArgumentException e) {
-             log.error("AI Prompt 格式错误！缺少用于公司介绍的占位符。请检查 config.yaml 中的 ai.prompt 配置。错误: {}", e.getMessage());
-             // 降级处理：不包含公司介绍，使用可能存在的旧 prompt 格式
-             try {
-                   requestMessage = String.format(aiConfig.getPrompt(), aiConfig.getIntroduce(), keyword, jobName, jd, config.getSayHi());
-                   log.warn("已降级使用可能兼容的旧 Prompt 格式 (未包含公司介绍)。");
-             } catch (Exception innerE) {
-                  log.error("尝试使用旧 Prompt 格式也失败，无法生成 AI 请求消息。错误: {}", innerE.getMessage());
-                  return new AiFilter(false, "AI Prompt 配置错误"); // 返回失败状态
-             }
+        // **提醒:** 确保 config.yaml 中的 ai.prompt 格式与这里的参数顺序一致
+        // (introduce, keyword, jobName, jd, companyIntro, sayHi)
+        String requestMessage = String.format(aiConfig.getPrompt(),
+                                              aiConfig.getIntroduce(),
+                                              keyword,
+                                              jobName,
+                                              jd,            // 职位描述
+                                              companyIntro,  // 公司介绍
+                                              config.getSayHi()); // 默认打招呼语
+
+        log.debug("向 AI 发送的请求消息: {}", requestMessage); // 添加 Debug 日志方便调试
+        String result = AiService.sendRequest(requestMessage);
+        log.debug("从 AI 收到的原始响应: {}", result);
+
+        // 简单的解析逻辑：检查是否包含 "false"
+        boolean matchResult = !result.contains("false");
+        // 如果匹配，直接使用 AI 返回的完整结果作为消息；如果不匹配，消息为 null
+        String message = matchResult ? result : null;
+
+        if (!matchResult) {
+            log.info("AI 判断不匹配，原始返回: {}", result);
         }
 
-        String result = AiService.sendRequest(requestMessage);
-        // 解析逻辑保持不变，但 AI 服务需要能处理包含公司介绍的新 prompt
-        return result.contains("false") ? new AiFilter(false) : new AiFilter(true, result);
+        return new AiFilter(matchResult, message);
     }
 
     private static boolean isTargetJob(String keyword, String jobName) {
